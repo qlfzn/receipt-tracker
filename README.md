@@ -1,4 +1,4 @@
-# Receipt Parser API
+# Receipt Tracker API
 ---
 ## Features
 - Scan for text from your receipt
