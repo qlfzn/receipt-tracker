@@ -1,6 +1,8 @@
+import io
 from fastapi import APIRouter, File, UploadFile, HTTPException
+from PIL import Image
 from app.models.schemas import ParsedReceipt
-from app.services.receipt_parser import parse_receipt, ReceiptParserError
+from app.services.image_parser import get_text_from_image, ImageParseError
 from app.services.ai import generate_formatted_data, AIExtractionError
 
 
@@ -13,27 +15,21 @@ def check_health():
 @router.post("/receipts/upload", response_model=ParsedReceipt)
 async def create_upload_file(file: UploadFile = File(...)):
     """
-    Upload a PDF receipt and extract structured data.
+    Upload image of receipt and extract structured data.
     
     Returns structured receipt information including merchant, items, and totals.
     """
-    if not file.filename.split(".")[1] == "pdf":
-        raise HTTPException(
-            status_code=400,
-            detail="Only PDF files are supported"
-        )
-    
     try:
-        # Read and parse PDF
         contents = await file.read()
-        extracted_text = parse_receipt(contents)
+        image = Image.open(io.BytesIO(contents))
+        extracted_text = get_text_from_image(image)
         
         # Extract structured data using AI
         receipt_data = generate_formatted_data(extracted_text)
         
         return receipt_data
         
-    except ReceiptParserError as e:
+    except ImageParseError as e:
         raise HTTPException(status_code=400, detail=f"error parsing file: {str(e)}")
     except AIExtractionError as e:
         raise HTTPException(status_code=422, detail=f"error extracting data: {str(e)}")

@@ -6,4 +6,4 @@
 - Stores receipt details for future use
 
 ## Tech Stack
-- Python: FastAPI
+- Python, FastAPI, Pytesseract

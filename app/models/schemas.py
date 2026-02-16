@@ -15,7 +15,7 @@ class ReceiptItem(BaseModel):
     type: Optional[str]
 
 class ParsedReceipt(BaseModel):
-    merchant_name: str
+    merchant_name: Optional[str]
     transaction_date: Optional[str]
     items: List[ReceiptItem] = []
     type: str
