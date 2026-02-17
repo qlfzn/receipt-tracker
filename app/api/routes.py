@@ -3,7 +3,7 @@ from fastapi import APIRouter, File, UploadFile, HTTPException
 from PIL import Image
 from app.models.schemas import ParsedReceipt
 from app.services.image_parser import get_text_from_image, ImageParseError
-from app.services.ai import generate_formatted_data, AIExtractionError
+from app.services.ai import generate_formatted_data, validate_json_with_schema, AIExtractionError
 
 
 router = APIRouter()
@@ -25,7 +25,8 @@ async def create_upload_file(file: UploadFile = File(...)):
         extracted_text = get_text_from_image(image)
         
         # Extract structured data using AI
-        receipt_data = generate_formatted_data(extracted_text)
+        parsed_data = generate_formatted_data(extracted_text)
+        receipt_data = validate_json_with_schema(parsed_data, ParsedReceipt)
         
         return receipt_data
         

@@ -20,6 +20,8 @@ class ParsedReceipt(BaseModel):
     items: List[ReceiptItem] = []
     type: str
     subtotal: Optional[float] = None
+    tax: Optional[float] = None
+    discount: Optional[float] = None
     total_amount: Optional[float]
 
 class HealthCheckResponse(BaseModel):
