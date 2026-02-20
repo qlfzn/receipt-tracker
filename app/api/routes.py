@@ -9,8 +9,8 @@ from app.services.ai import generate_formatted_data, validate_json_with_schema, 
 router = APIRouter()
 
 @router.get("/")
-def check_health():
-    return "all good!"
+def read_root():
+    return {"message": "all good!"}
 
 @router.post("/receipts/upload", response_model=ParsedReceipt)
 async def create_upload_file(file: UploadFile = File(...)):

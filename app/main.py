@@ -6,11 +6,12 @@ from app.db import Database
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db = Database()
-    cursor = db.conn.cursor()
-    cursor.execute("SELECT 1")
+    db = Database().db
+    conn = db.connect()
+    print("Connected to database!")
+    app.state.db = conn
     yield
-    cursor.close()
+    conn.close()
 
 app = FastAPI(
     title="Receipt Tracker API",

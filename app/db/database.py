@@ -1,29 +1,24 @@
 import os
-import sys
 from dotenv import load_dotenv
-import psycopg2
+from sqlalchemy import create_engine, Engine
 
-class Database():
-    def __init__(self) -> None:
-        self.conn = self.connect()
+load_dotenv()
+
+class Database:
+    def __init__(self):
+        self.db = self.create_db()
     
-    def connect(self):
-        """
-        Connect to database and return connection
-        """
-        print("Connecting to PostgreSQL Database...")
+    def create_db(self) -> Engine:
+        print("Creating DB connection...")
         try:
-            load_dotenv()
-            conn = psycopg2.connect(
-                    host = os.getenv("POSTGRES_HOST"),
-                    dbname = os.getenv("POSTGRES_DB"),
-                    user = os.getenv("POSTGRES_USER"),
-                    password = os.getenv("POSTGRES_PASSWORD"),
-                    port = os.getenv("POSTGRES_PORT")
-                )
-        except psycopg2.OperationalError as e:
-            print(f"Could not connect to Database: {e}")
-            sys.exit(1)
+            DB_HOST = os.getenv("POSTGRES_HOST")
+            DB_NAME = os.getenv("POSTGRES_DB")
+            DB_USER = os.getenv("POSTGRES_USER")
+            DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+            DB_PORT = os.getenv("POSTGRES_PORT")
 
-        print("Successfully connected to database")
-        return conn
+            engine = create_engine(url=f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+            return engine
+        except Exception as e:
+            print(f"Failed to create DB engine: {e}")
+            raise
