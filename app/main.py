@@ -2,16 +2,14 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import uvicorn
 from app.api.routes import router
-from app.db import Database
+from app.db.database import database
+from app.db import models
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db = Database().db
-    conn = db.connect()
-    print("Connected to database!")
-    app.state.db = conn
+    print("Database ready")
     yield
-    conn.close()
+    print("Application shutdown")
 
 app = FastAPI(
     title="Receipt Tracker API",
