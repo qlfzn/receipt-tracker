@@ -1,9 +1,26 @@
-# Receipt Tracker API
+# flowcessor
+
+A web app that parses bank statement PDFs and returns structured cashflow data.
+
 ---
+
 ## Features
-- Scan for text from your receipt
-- Structure extracted text from receipt
-- Stores receipt details for future use
+
+- Upload a bank statement PDF via drag-and-drop or file browser
+- Extracts and structures transaction data using AI
+- Displays summary stats (total transactions, credits, debits)
+- Categorises transactions by payment method (Direct / TöyyibPay)
 
 ## Tech Stack
-- Python, FastAPI, Pytesseract
+
+**Backend**
+
+- Python, FastAPI
+- PyMuPDF — PDF text extraction
+- Groq — AI-powered data structuring
+- Pydantic
+
+**Frontend**
+
+- React, Vite
+- Chakra UI

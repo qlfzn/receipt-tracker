@@ -1,8 +1,10 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 from app.api.routes import router
 from app.db import models
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -10,11 +12,19 @@ async def lifespan(app: FastAPI):
     yield
     print("Application shutdown")
 
+
 app = FastAPI(
-    title="Receipt Tracker API",
-    description="API for parsing and tracking receipts",
+    title="Bank Statement Processing API",
+    description="API for scanning and processing bank statement",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(router, prefix="/api/v1")
