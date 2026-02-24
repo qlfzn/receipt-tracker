@@ -1,26 +1,27 @@
-from pypdf import PdfReader
-from io import BytesIO
+import fitz
+import pytesseract
+from PIL import Image
 
-class ReceiptParserError(Exception):
+class PDFParserError(Exception):
     pass
 
-def parse_receipt(file_content: bytes) -> str:
-    # only expect PDF
-    try:
-        pdf_file = BytesIO(file_content)
-        reader = PdfReader(pdf_file)
+def extract_text_from_pdf(contents: bytes) -> str:
+    doc = fitz.open(stream=contents, filetype="pdf")
+    full_text = ""
 
-        # check no. of pages
-        if len(reader.pages) < 1:
-            raise ReceiptParserError("PDF has no pages")
+    for page in doc:
+        # direct text extraction
+        print("Attempting direct extraction...")
+        page_content = page.get_text()
+        text = page_content.strip() if isinstance(page_content, str) else ""
 
-        # extract text from all pages
-        text_content = []
-        for page in reader.pages:
-            text = page.extract_text()
-            if text:
-                text_content.append(text)
-        return "\n".join(text_content)
+        if not text:
+            # fallback to OCR
+            print("Changing to OCR...")
+            pix = page.get_pixmap(dpi=300)
+            image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+            text = pytesseract.image_to_string(image)
 
-    except Exception as e:
-        raise ReceiptParserError(f"Failed to read file: {e}")
+        full_text += text + "\n"
+
+    return full_text

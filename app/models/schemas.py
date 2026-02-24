@@ -1,29 +1,14 @@
+from datetime import date
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import List
 
-class ReceiptUploadResponse(BaseModel):
-    filename: str
-    extracted_text: str
-    message: str
+class Transaction(BaseModel):
+    date: date
+    transaction: str
+    amount: float
+    description: str
+    category: str
+    is_direct: bool
 
-class ReceiptItem(BaseModel):
-    name: str
-    quantity: Optional[int]
-    unit_price: Optional[float]
-    total_price: Optional[float]
-    category: Optional[str]
-    type: Optional[str]
-
-class ParsedReceipt(BaseModel):
-    merchant_name: Optional[str]
-    transaction_date: Optional[str]
-    items: List[ReceiptItem] = []
-    type: str
-    subtotal: Optional[float] = None
-    tax: Optional[float] = None
-    discount: Optional[float] = None
-    total_amount: Optional[float]
-
-class HealthCheckResponse(BaseModel):
-    status: str
-    message: str
+class BankStatementResponse(BaseModel):
+    transactions: List[Transaction]

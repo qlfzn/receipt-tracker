@@ -1,10 +1,7 @@
-import os
-from dotenv import load_dotenv
+from app.config import settings
 from sqlalchemy import create_engine, Engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-
-load_dotenv()
 
 class Database:
     def __init__(self):
@@ -14,14 +11,8 @@ class Database:
     def create_engine(self) -> Engine:
         print("Creating DB connection...")
         try:
-            DB_HOST = os.getenv("POSTGRES_HOST")
-            DB_NAME = os.getenv("POSTGRES_DB")
-            DB_USER = os.getenv("POSTGRES_USER")
-            DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
-            DB_PORT = os.getenv("POSTGRES_PORT")
-
             engine = create_engine(
-                url=f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+                url=settings.DATABASE_URL
             )
             return engine
         except Exception as e:

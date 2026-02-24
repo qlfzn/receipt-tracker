@@ -3,7 +3,7 @@ import json
 from typing import Type, Dict
 from dotenv import load_dotenv
 from groq import Groq
-from app.models.schemas import ParsedReceipt
+from app.models.schemas import BankStatementResponse
 from pydantic import BaseModel, ValidationError
 
 load_dotenv()
@@ -15,94 +15,112 @@ client = Groq(
     max_retries=3,
 )
 
+
 class AIExtractionError(Exception):
     pass
 
+
 class SchemaValidationError(Exception):
     pass
+
 
 def generate_formatted_data(parsed_text: str) -> Dict:
     """
     Extract structured receipt data from raw text.
     """
-    schema = ParsedReceipt.model_json_schema()
-    
+    response_schema = BankStatementResponse.model_json_schema()
+
     example = """
     Example input:
-    (Receipt)
-    "Supermarket
-    Date: 01/15/2026
-    
-    Milk 2.0 $3.99 $7.98
-    Bread 1.0 $2.49 $2.49
-    
-    Subtotal: $10.47
-    Tax: $1.10
-    Discount: $0.50
-    Total: $11.31"
-    
+    "
+    Statement Date: 31/03/2024
+    (Transaction)
+    Date | Transaction Description | Transaction Amount |
+    15/03 | TRANSFER FR A/C JOHN DOE* Friendly game payment | 450.00- |
+    21/03 | TRANSFER TO A/C TOYYIBPAY SDN. BHD.* NPR4TADN040302414 MBB CT- | 380.00+ |
+    25/03 | TRANSFER TO A/C CAROLYN BESSETE* Jersey payment | 100.00+ |
+    "
+
     Example output:
     {
-        "merchant_name": "Supermarket",
-        "transaction_date": "2026-01-15",
-        "items": [
-            {"name": "Milk", "quantity": 2.0, "unit_price": 3.99, "total_price": 7.98, "category": null},
-            {"name": "Bread", "quantity": 1.0, "unit_price": 2.49, "total_price": 2.49, "category": null}
-        ],
-        "type": "receipt"
-        "subtotal": 10.47,
-        "tax": 1.10,
-        "discount": 0.50,
-        "total_amount": 11.31,
-        "confidence_score": 0.95
+        "transactions": [
+            {
+                "date": "2024-03-15",
+                "transaction": "TRANSFER FR A/C JOHN DOE",
+                "amount": 450.00,
+                "description": "Friendly game payment",
+                "category": "transfer_in",
+                "is_direct": true
+            },
+            {
+                "date": "2024-03-21",
+                "transaction": "TRANSFER TO A/C TOYYIBPAY SDN. BHD.",
+                "amount": -380.00,
+                "description": "NPR4TADN040302414 MBB CT",
+                "category": "payment",
+                "is_direct": false
+            },
+            {
+                "date": "2024-03-25",
+                "transaction": "TRANSFER TO A/C CAROLYN BESSETE",
+                "amount": -100.00,
+                "description": "Jersey payment",
+                "category": "transfer_out",
+                "is_direct": true
+            }
+        ]
     }
     """
-    
+
     try:
         chat_completion = client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
                     "content": f"""
-                    You are a receipt data extraction expert. Extract structured information from receipt text and return ONLY valid JSON.
-                    Schema to follow: {json.dumps(schema, indent=2)}
-                    
+                    You are a Maybank bank statement data extraction expert. Extract all transactions from the statement text and return ONLY valid JSON matching the schema.
+                    Schema to follow: {json.dumps(response_schema, indent=2)}
+
                     Rules:
-                    - Return ONLY valid JSON, no markdown or explanation
-                    - If it is not receipt, it might be proof of payment file. Please structure the extracted text from proof of payment based on the same schema.
-                    - Use null for missing optional fields
-                    - Format dates as YYYY-MM-DD when possible
-                    - Use decimal numbers for prices
-                    - Estimate confidence_score (0.0-1.0) based on text clarity
-                    - If you cannot extract required fields (subtotal, items, total_amount), set confidence_score < 0.5
-                    """
+                    - Return ONLY valid JSON, no markdown, no explanation
+                    - Extract every transaction row — do not skip any
+                    - Format all dates as YYYY-MM-DD, using the statement year when only day/month is given
+                    - Use decimal numbers for amounts
+                    - Inflows (TRANSFER FR A/C, credit entries) must have a positive amount
+                    - Outflows (TRANSFER TO A/C, debit entries) must have a negative amount
+                    - Strip reference codes and noise from the transaction name; keep only the counterparty name
+                    - Put the human-readable payment purpose or reference code in the description field
+                    - Set is_direct to false if the transaction involves a payment gateway (e.g. TOYYIBPAY, SHOPEE, GRAB, FPX, BILLPLZ); otherwise set is_direct to true
+                    - Assign a category from: transfer_in, transfer_out
+                    """,
                 },
                 {
                     "role": "user",
-                    "content": f"{example}\n\nNow extract from this receipt:\n\n{parsed_text}"
-                }
+                    "content": f"{example}\n\nNow extract from this receipt:\n\n{parsed_text}",
+                },
             ],
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"},
             temperature=0.1,
         )
-        
+
         response_text = chat_completion.choices[0].message.content
-        
+
         try:
             parsed_json = json.loads(str(response_text))
             return parsed_json
         except json.JSONDecodeError as e:
             raise AIExtractionError(f"failed to parse LLM response as JSON: {e}")
-            
+
     except Exception as e:
         if isinstance(e, AIExtractionError):
             raise
         raise AIExtractionError(f"failed to extract receipt data: {e}")
+
 
 def validate_json_with_schema(parsed_json: dict, schema: Type[BaseModel]) -> BaseModel:
     try:
         receipt = schema(**parsed_json)
         return receipt
     except ValidationError as e:
-        raise SchemaValidationError(f"failed to validate json to schema: {e}") 
+        raise SchemaValidationError(f"failed to validate json to schema: {e}")
