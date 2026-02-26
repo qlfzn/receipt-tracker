@@ -48,7 +48,7 @@ const App = () => {
 
   return (
     <Box minH="100vh" bg="gray.50" px={4} py={10}>
-      <Box w="full" maxW={data ? "900px" : "480px"} mx="auto">
+      <Box w="full" maxW={data ? "1500px" : "480px"} mx="auto">
         <Stack gap={6}>
           {/* Upload card */}
           <Box
