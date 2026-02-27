@@ -32,6 +32,8 @@ async def create_upload_file(file: UploadFile = File(...)):
         formatted_data = generate_formatted_data(extracted_text)
         bank_statement_data = validate_json_with_schema(formatted_data, BankStatementResponse)
 
+        list_of_transactions = list(bank_statement_data)
+        print(f"no. of transactions: {len(list_of_transactions)}")
         return bank_statement_data
     except PDFParserError as e:
         raise HTTPException(status_code=400, detail=f"error parsing file: {str(e)}")

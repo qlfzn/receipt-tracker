@@ -1,10 +1,11 @@
 import os
 import json
-from typing import Type, Dict
+from typing import Type, Dict, List
 from dotenv import load_dotenv
 from groq import Groq
 from app.models.schemas import BankStatementResponse
 from pydantic import BaseModel, ValidationError
+from app.config import MAX_CHARS_PER_CHUNK, SYSTEM_PROMPT, EXAMPLE
 
 load_dotenv()
 
@@ -15,102 +16,106 @@ client = Groq(
     max_retries=3,
 )
 
-
 class AIExtractionError(Exception):
     pass
-
 
 class SchemaValidationError(Exception):
     pass
 
 
+def split_into_chunks(text: str, max_chars: int) -> List[str]:
+    """
+    Split text into chunks by line boundaries
+    """
+    lines = text.splitlines()
+
+    header_lines = []
+    for line in lines[:10]:
+        if line.strip():
+            header_lines.append(line)
+        if len(header_lines) >= 3:
+            break
+    header = "\n".join(header_lines) + "\n"
+
+    chunks = []
+    current_chunk_lines = []
+    current_length = len(header)
+
+    for line in lines:
+        line_len = len(line) + 1
+        if current_length + line_len > max_chars and current_chunk_lines:
+            chunks.append(header + "\n".join(current_chunk_lines))
+            current_chunk_lines = [line]
+            current_length = len(header) + line_len
+        else:
+            current_chunk_lines.append(line)
+            current_length += line_len
+
+    if current_chunk_lines:
+        chunks.append(header + "\n".join(current_chunk_lines))
+
+    return chunks
+
+
+def extract_transactions_from_chunk(chunk: str, response_schema: dict) -> List[Dict]:
+    """
+    Send a single chunk to the LLM and return the list of transactions.
+    """
+    chat_completion = client.chat.completions.create(
+        messages=[
+            {
+                "role": "system",
+                "content": f"{SYSTEM_PROMPT}\nSchema to follow: {json.dumps(response_schema, indent=2)}",
+            },
+            {
+                "role": "user",
+                "content": f"{EXAMPLE}\n\nNow extract from this statement chunk:\n\n{chunk}",
+            },
+        ],
+        model="llama-3.3-70b-versatile",
+        response_format={"type": "json_object"},
+        temperature=0.1,
+    )
+
+    message = chat_completion.choices[0].message
+    response_text = message.content
+
+    try:
+        parsed = json.loads(str(response_text))
+        return parsed.get("transactions", [])
+    except json.JSONDecodeError as e:
+        raise AIExtractionError(
+            f"failed to parse LLM response as JSON: {e}\n"
+            f"Raw response was: {response_text[:500]}"
+        )
+
+
 def generate_formatted_data(parsed_text: str) -> Dict:
     """
-    Extract structured receipt data from raw text.
+    Extract structured transaction data from raw text.
+    Automatically chunks large statements to stay within token limits.
     """
     response_schema = BankStatementResponse.model_json_schema()
 
-    example = """
-    Example input:
-    "
-    Statement Date: 31/03/2024
-    (Transaction)
-    Date | Transaction Description | Transaction Amount |
-    15/03 | TRANSFER FR A/C JOHN DOE* Friendly game payment | 450.00- |
-    21/03 | TRANSFER TO A/C TOYYIBPAY SDN. BHD.* NPR4TADN040302414 MBB CT- | 380.00+ |
-    25/03 | TRANSFER TO A/C CAROLYN BESSETE* Jersey payment | 100.00+ |
-    "
-
-    Example output:
-    {
-        "transactions": [
-            {
-                "date": "2024-03-15",
-                "transaction": "TRANSFER FR A/C JOHN DOE",
-                "amount": 450.00,
-                "description": "Friendly game payment",
-                "category": "transfer_in",
-                "is_direct": true
-            },
-            {
-                "date": "2024-03-21",
-                "transaction": "TRANSFER TO A/C TOYYIBPAY SDN. BHD.",
-                "amount": -380.00,
-                "description": "NPR4TADN040302414 MBB CT",
-                "category": "payment",
-                "is_direct": false
-            },
-            {
-                "date": "2024-03-25",
-                "transaction": "TRANSFER TO A/C CAROLYN BESSETE",
-                "amount": -100.00,
-                "description": "Jersey payment",
-                "category": "transfer_out",
-                "is_direct": true
-            }
-        ]
-    }
-    """
-
     try:
-        chat_completion = client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"""
-                    You are a Maybank bank statement data extraction expert. Extract all transactions from the statement text and return ONLY valid JSON matching the schema.
-                    Schema to follow: {json.dumps(response_schema, indent=2)}
+        if len(parsed_text) <= MAX_CHARS_PER_CHUNK:
+            transactions = extract_transactions_from_chunk(parsed_text, response_schema)
+        else:
+            chunks = split_into_chunks(parsed_text, MAX_CHARS_PER_CHUNK)
+            transactions = []
+            seen_txn = set()
 
-                    Rules:
-                    - Return ONLY valid JSON, no markdown, no explanation
-                    - Extract every transaction row — do not skip any
-                    - Format all dates as YYYY-MM-DD, using the statement year when only day/month is given
-                    - Use decimal numbers for amounts
-                    - Inflows (TRANSFER FR A/C, credit entries) must have a positive amount
-                    - Outflows (TRANSFER TO A/C, debit entries) must have a negative amount
-                    - Strip reference codes and noise from the transaction name; keep only the counterparty name
-                    - Put the human-readable payment purpose or reference code in the description field
-                    - Set is_direct to false if the transaction involves a payment gateway (e.g. TOYYIBPAY, SHOPEE, GRAB, FPX, BILLPLZ); otherwise set is_direct to true
-                    - Assign a category from: transfer_in, transfer_out
-                    """,
-                },
-                {
-                    "role": "user",
-                    "content": f"{example}\n\nNow extract from this receipt:\n\n{parsed_text}",
-                },
-            ],
-            model="llama-3.3-70b-versatile",
-            response_format={"type": "json_object"},
-            temperature=0.1,
-        )
+            for chunk in chunks:
+                chunk_transactions = extract_transactions_from_chunk(
+                    chunk, response_schema
+                )
+                for t in chunk_transactions:
+                    key = (t.get("date"), t.get("transaction"), t.get("amount"))
+                    if key not in seen_txn:
+                        seen_txn.add(key)
+                        transactions.append(t)
 
-        response_text = chat_completion.choices[0].message.content
-
-        try:
-            parsed_json = json.loads(str(response_text))
-            return parsed_json
-        except json.JSONDecodeError as e:
-            raise AIExtractionError(f"failed to parse LLM response as JSON: {e}")
+        return {"transactions": transactions}
 
     except Exception as e:
         if isinstance(e, AIExtractionError):
