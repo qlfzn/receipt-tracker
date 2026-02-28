@@ -1,27 +1,24 @@
 import fitz
 import pytesseract
 from PIL import Image
+from pdf2image import convert_from_bytes
+import cv2
+import numpy as np
 
 class PDFParserError(Exception):
     pass
 
 def extract_text_from_pdf(contents: bytes) -> str:
-    doc = fitz.open(stream=contents, filetype="pdf")
-    full_text = ""
+    pages = convert_from_bytes(contents)
 
-    for page in doc:
-        # direct text extraction
-        print("Attempting direct extraction...")
-        page_content = page.get_text()
-        text = page_content.strip() if isinstance(page_content, str) else ""
+    extracted_text = ""
+    for page in pages:
+        img_cv = cv2.cvtColor(np.array(page), cv2.COLOR_RGB2BGR)
 
-        if not text:
-            # fallback to OCR
-            print("Changing to OCR...")
-            pix = page.get_pixmap(dpi=300)
-            image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-            text = pytesseract.image_to_string(image)
-
-        full_text += text + "\n"
-
-    return full_text
+        gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+        _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+        
+        text = pytesseract.image_to_string(thresh)
+        extracted_text += text + "\n"
+        
+    return extracted_text

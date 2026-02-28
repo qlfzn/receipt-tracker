@@ -86,7 +86,6 @@ def extract_transactions_from_chunk(chunk: str, response_schema: dict) -> List[D
     except json.JSONDecodeError as e:
         raise AIExtractionError(
             f"failed to parse LLM response as JSON: {e}\n"
-            f"Raw response was: {response_text[:500]}"
         )
 
 
