@@ -12,7 +12,7 @@ import {
 import StatsBar from "./components/StatsBar"
 import TransactionsTable from "./components/TransactionsTable"
 
-const API_URL = "http://localhost:8000/api/v1/files/upload"
+const API_URL = import.meta.env.VITE_API_URL
 
 const App = () => {
   const [file, setFile] = useState(null)
